@@ -1,25 +1,41 @@
-import asyncio
-import websockets
-import json
+import config as cfg
+import source as src
 
-msg = \
-{
-  "id" : 1,
-  "method" : "public/get_mark_price_history",
-  "params" : {
-    "instrument_name" : "BTC-25JUN21-50000-C",
-    "start_timestamp" : 1609376800000,
-    "end_timestamp" : 1609376810000
-  },
-  "jsonrpc" : "2.0"
-}
+def main():
+	gap = 100
+	gap_ignore = 50
+	
+	websocket = src.authentication()
+	
+	current_price = src.get_current_price(websocket,cfg.instrument)
+	buy_price = current_price - gap / 2
+	sell_price = current_price + gap
 
-async def call_api(msg):
-   async with websockets.connect('wss://test.deribit.com/ws/api/v2') as websocket:
-       await websocket.send(msg)
-       while websocket.open:
-           response = await websocket.recv()
-           # do something with the response...
-           print(response)
+	print("Buy order")
+	in_position = False
 
-asyncio.get_event_loop().run_until_complete(call_api(json.dumps(msg)))
+	while True:
+		current_price = src.get_current_price(websocket,cfg.instrument)
+		if not in_position:
+			if current_price <= buy_price:
+				print("Sell order")
+				in_position = True
+			
+			if current_price > buy_price + gap + gap_ignore:
+				print("Cancel buy order")
+				buy_price = current_price - gap / 2
+				print("Buy order")
+			if current_price < sell_price - gap - gap_ignore:
+				print("Cancel sell order")
+				sell_price = current_price + gap
+				print("Sell order")
+		elif in_position:
+			if current_price >= sell_price:
+				print("Sell order")
+				in_position = False
+			
+		
+		
+
+if __name__ == '__main__':
+	main()

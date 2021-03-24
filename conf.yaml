@@ -1,0 +1,9 @@
+robot:
+  gap: 10
+  gap_ignore: 5
+  amount: 100
+exchange:
+  client_id: ''
+  client_secret: ''
+  uri: 'wss://test.deribit.com/ws/api/v2'
+  instrument: 'BTC-PERPETUAL'

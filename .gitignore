@@ -112,5 +112,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
 keys.py
 *.ipynb
+settings.json

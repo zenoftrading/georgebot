@@ -1,7 +1,7 @@
-import asyncio, websockets, json, random
+import asyncio, websockets, json, random, yaml
 import config as cfg
 
-def authentication():
+def authentication(exchange):
 	"""Websocket authentication from API to send private responses
 
 	https://docs.deribit.com/#public-auth
@@ -17,23 +17,25 @@ def authentication():
 			"method": "public/auth",
 			"params": {
 				"grant_type": "client_credentials",
-				"client_id": cfg.client_id,
-				"client_secret": cfg.client_secret
+				# "client_id": cfg.client_id,
+				# "client_secret": cfg.client_secret
+				"client_id": exchange['client_id'],
+				"client_secret": exchange['client_secret']
 			}
 		}
 
 	async def auth(msg):
-		websocket = await websockets.connect(cfg.uri)
+		# websocket = await websockets.connect(cfg.uri)
+		websocket = await websockets.connect(exchange['uri'])
 		await websocket.send(msg)
-		# response = await websocket.recv()
-		# print("websocket: {}".format(response))
+		await websocket.recv()
 		return websocket
 
 	ws = asyncio.get_event_loop().run_until_complete(auth(json.dumps(msg)))
 
 	return ws
 
-def get_current_price(websocket,instrumet):
+def get_current_price(websocket,instrument):
 	"""Get current (mark price) for an instrument
 
 	https://docs.deribit.com/?python#public-ticker
@@ -52,7 +54,7 @@ def get_current_price(websocket,instrumet):
 			"id": cfg.msg_id,
 			"method": "public/ticker",
 			"params": {
-				"instrument_name": instrumet
+				"instrument_name": instrument
 			}
 		}
 
@@ -98,6 +100,9 @@ def set_order(websocket,status,price,amount,instrument):
 			}
 		}
 
+	print("{} {} {} on {}".format(status,amount,instrument,price))
+	# order_id = 0
+
 	async def order(websocket, msg):
 		await websocket.send(msg)
 		response = await websocket.recv()
@@ -105,12 +110,9 @@ def set_order(websocket,status,price,amount,instrument):
 			return json.loads(response)['result']['order']['order_id']
 		except Exception as e:
 			print("set_order error: {}".format(e))
-			return False
+			return 0
 
 	order_id = asyncio.get_event_loop().run_until_complete(order(websocket, json.dumps(msg)))
-	
-	print("{} {} {} on {}".format(status,amount,instrument,price))
-	# order_id = 0
 
 	return order_id
 
@@ -140,7 +142,11 @@ def check_order(websocket,order_id):
 	async def check(websocket, msg):
 		await websocket.send(msg)
 		response = await websocket.recv()
-		return json.loads(response)['result']['order_state'] != 'open'
+		try:
+			return json.loads(response)['result']['order_state'] != 'open'
+		except Exception as e:
+			print("check_order error: {}".format(e))
+			return False
 
 	order_status = asyncio.get_event_loop().run_until_complete(check(websocket, json.dumps(msg)))    
 	
@@ -171,11 +177,127 @@ def cancel_order(websocket,order_id):
 			}
 		}
 
+	print("Cancelling order {}".format(order_id))
+
 	async def cancel(websocket, msg):
 		await websocket.send(msg)
-		# response = await websocket.recv()
-		# print(json.dumps(json.loads(response), indent=4))
+		await websocket.recv()
+		return
 
 	asyncio.get_event_loop().run_until_complete(cancel(websocket, json.dumps(msg)))
 	
-	print("Cancelling order {}".format(order_id))
+	
+
+def read_config(filename):
+	"""Read .yaml config file
+
+	robot:
+		gap: 0
+		gap_ignore: 0
+		amount: 0
+	exchange:
+  		client_id: ''
+  		client_secret: ''
+  		uri: ''
+  		instrument: ''	
+	
+	Args:
+		filename (string): configuration file name
+
+	Returns:
+		dict: dict with parameters
+	"""
+	with open(filename) as file:
+		try:
+			confs = yaml.safe_load(file)
+			return confs
+		except yaml.YAMLError as e:
+			print("Read config file error: {}".format(e))
+
+def run(websocket,config):
+	"""Main alog function
+
+	Args:
+		websocket (websockets object): authenticated websocket
+		config (dict): configuration data from yaml file
+	"""
+	gap = config['robot']['gap']
+	gap_ignore = config['robot']['gap_ignore']
+	amount = config['robot']['amount']
+	
+	instrument = config['exchange']['instrument']
+	
+	current_price = get_current_price(websocket,instrument)
+	buy_price = current_price - gap / 2
+	sell_price = current_price + gap
+
+	print("buy_price {}, sell_price {}".format(buy_price,sell_price))
+	status = 'buy'
+	order_id = set_order(websocket,status,buy_price,amount,instrument)
+
+	while True:
+		current_price = get_current_price(websocket,instrument)
+		if status == 'buy' and current_price > 0:
+			if check_order(websocket,order_id):
+				status = 'sell'
+				sell_price = current_price + gap
+				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
+				order_id = set_order(websocket,status,sell_price,amount,instrument)
+			
+			elif current_price > buy_price + gap + gap_ignore:
+				cancel_order(websocket,order_id)
+				buy_price = current_price - gap/2
+				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
+				order_id = set_order(websocket,status,buy_price,amount,instrument)
+		
+		elif status == 'sell' and current_price > 0:
+			if check_order(websocket,order_id):
+				status = 'buy'
+				buy_price = current_price - gap/2
+				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
+				order_id = set_order(websocket,status,buy_price,amount,instrument)
+
+			elif current_price < sell_price - gap - gap_ignore:
+				cancel_order(websocket,order_id)
+				sell_price = current_price + gap
+				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
+				order_id = set_order(websocket,status,sell_price,amount,instrument)
+
+		else:
+			print("Order status error")
+			status = 'buy'	
+
+def cancel_all_orders(websocket):
+	"""Cancel all order
+
+	Args:
+		websocket (websockets object): authenticated websocket
+	"""
+	cfg.msg_id += 1
+	msg = \
+		{
+			"jsonrpc": "2.0",
+			"id": cfg.msg_id,
+			"method": "private/cancel_all",
+			"params": {}
+		}
+
+	async def cancel_all(websocket, msg):
+		await websocket.send(msg)
+		await websocket.recv()
+		return
+
+	asyncio.get_event_loop().run_until_complete(cancel_all(websocket, json.dumps(msg)))	
+
+def terminate(websocket):
+	"""Termiante bot: close all orders and websocket
+
+	Args:
+		websocket (websockets object): authenticated websocket
+	"""
+	async def close(websocket):
+		await websocket.close()
+		return
+
+	cancel_all_orders(websocket)
+	asyncio.get_event_loop().run_until_complete(close(websocket))

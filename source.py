@@ -1,11 +1,14 @@
 import asyncio, websockets, json, random
 import config as cfg
 
-def get_msg_id(msg_id):
-	msg_id += 1
-	return msg_id
-
 def authentication():
+	"""Websocket authentication from API to send private responses
+
+	https://docs.deribit.com/#public-auth
+
+	Returns:
+		websockets object: authenticated websocket
+	"""
 	cfg.msg_id += 1
 	msg = \
 		{
@@ -22,6 +25,8 @@ def authentication():
 	async def auth(msg):
 		websocket = await websockets.connect(cfg.uri)
 		await websocket.send(msg)
+		# response = await websocket.recv()
+		# print("websocket: {}".format(response))
 		return websocket
 
 	ws = asyncio.get_event_loop().run_until_complete(auth(json.dumps(msg)))
@@ -29,6 +34,17 @@ def authentication():
 	return ws
 
 def get_current_price(websocket,instrumet):
+	"""Get current (mark price) for an instrument
+
+	https://docs.deribit.com/?python#public-ticker
+
+	Args:
+		websocket (websockets object): authenticated websocket
+		instrumet (string): instrument name
+
+	Returns:
+		number: the mark price for the instrument
+	"""
 	cfg.msg_id += 1
 	msg = \
 		{
@@ -43,87 +59,123 @@ def get_current_price(websocket,instrumet):
 	async def ticker(websocket, msg):
 		await websocket.send(msg)
 		response = await websocket.recv()
-		# print(json.dumps(json.loads(response), indent=4))
 		try:
+			print("ticker mark_price: {}".format(json.loads(response)['result']['mark_price']))
 			return json.loads(response)['result']['mark_price']
-		except:
+		except Exception as e:
+			print("ticker mark_price error: {}".format(e))
 			return 0
 
 	return asyncio.get_event_loop().run_until_complete(ticker(websocket, json.dumps(msg)))
 
 def set_order(websocket,status,price,amount,instrument):
-	# cfg.msg_id += 1
-	# msg = \
-	#     {
-	#         "jsonrpc": "2.0",
-	#         "id": cfg.msg_id,
-	#         "method": "private/" + status,
-	#         "params": {
-	#             "instrument_name": instrument,
-	#             "amount": amount,
-	#             "type": "limit",
-	#             "price": price
-	#         }
-	#     }
+	"""Places a buy or sell limit order for an instrument
 
-	# async def order(websocket, msg):
-	#     await websocket.send(msg)
-	#     response = await websocket.recv()
-	#     print(json.dumps(json.loads(response), indent=4))
-	#     return json.loads(response)['result']['order']['order_id']
+	https://docs.deribit.com/#private-buy
+	https://docs.deribit.com/#private-sell
 
-	# order_id = asyncio.get_event_loop().run_until_complete(order(websocket, json.dumps(msg)))
+	Args:
+		websocket (websockets object): authenticated websocket
+		status (string): 'buy' or 'sell' order
+		price (number): price for limit order
+		amount (number): for perpetual amount is in USD units 
+		instrument (string): instrument 
+
+	Returns:
+		number: order id
+	"""
+	cfg.msg_id += 1
+	msg = \
+		{
+			"jsonrpc": "2.0",
+			"id": cfg.msg_id,
+			"method": "private/" + status,
+			"params": {
+				"instrument_name": instrument,
+				"amount": amount,
+				"type": "limit",
+				"price": price
+			}
+		}
+
+	async def order(websocket, msg):
+		await websocket.send(msg)
+		response = await websocket.recv()
+		try:
+			return json.loads(response)['result']['order']['order_id']
+		except Exception as e:
+			print("set_order error: {}".format(e))
+			return False
+
+	order_id = asyncio.get_event_loop().run_until_complete(order(websocket, json.dumps(msg)))
 	
 	print("{} {} {} on {}".format(status,amount,instrument,price))
-	order_id = 0
+	# order_id = 0
 
 	return order_id
 
 def check_order(websocket,order_id):
-	# cfg.msg_id += 1
-	# msg = \
-	#     {
-	#         "jsonrpc": "2.0",
-	#         "id": cfg.msg_id,
-	#         "method": "private/get_order_state",
-	#         "params": {
-	#             "order_id": order_id
-	#         }
-	#     }
+	"""Retrieve the current state of an order specified by order id
 
-	# async def check(websocket, msg):
-	#     await websocket.send(msg)
-	#     response = await websocket.recv()
-	#     print(json.dumps(json.loads(response), indent=4))
-	#     # return True if order was closed and False another
-	#     return json.loads(response)['result']['order_state'] != 'open'
+	https://docs.deribit.com/#private-get_order_state
 
-	# order_status = asyncio.get_event_loop().run_until_complete(check(websocket, json.dumps(msg)))    
+	Args:
+		websocket (websockets object): authenticated websocket
+		order_id (number): order id
+
+	Returns:
+		boolian: True if order was closed and False if not
+	"""
+	cfg.msg_id += 1
+	msg = \
+		{
+			"jsonrpc": "2.0",
+			"id": cfg.msg_id,
+			"method": "private/get_order_state",
+			"params": {
+				"order_id": order_id
+			}
+		}
+
+	async def check(websocket, msg):
+		await websocket.send(msg)
+		response = await websocket.recv()
+		return json.loads(response)['result']['order_state'] != 'open'
+
+	order_status = asyncio.get_event_loop().run_until_complete(check(websocket, json.dumps(msg)))    
 	
 	print("Checking order {}".format(order_id))
-	order_status = random.choice([True, False])
+	# order_status = random.choice([True, False])
 	print("Order status {}".format(order_status))
 	
 	return order_status
 
 def cancel_order(websocket,order_id):
-	# cfg.msg_id += 1
-	# msg = \
-	#     {
-	#         "jsonrpc": "2.0",
-	#         "id": cfg.msg_id,
-	#         "method": "private/cancel",
-	#         "params": {
-	#             "order_id": order_id
-	#         }
-	#     }
+	"""Cancel an order specified by order id
 
-	# async def cancel(websocket, msg):
-	#     await websocket.send(msg)
-	#     response = await websocket.recv()
-	#     print(json.dumps(json.loads(response), indent=4))
-	#     return
+	https://docs.deribit.com/#private-cancel
 
-	# asyncio.get_event_loop().run_until_complete(cancel(websocket, json.dumps(msg)))
+	Args:
+		websocket (websockets object): authenticated websocket
+		order_id (number): order id
+	"""
+
+	cfg.msg_id += 1
+	msg = \
+		{
+			"jsonrpc": "2.0",
+			"id": cfg.msg_id,
+			"method": "private/cancel",
+			"params": {
+				"order_id": order_id
+			}
+		}
+
+	async def cancel(websocket, msg):
+		await websocket.send(msg)
+		# response = await websocket.recv()
+		# print(json.dumps(json.loads(response), indent=4))
+
+	asyncio.get_event_loop().run_until_complete(cancel(websocket, json.dumps(msg)))
 	
 	print("Cancelling order {}".format(order_id))

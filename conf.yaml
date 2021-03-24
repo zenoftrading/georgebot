@@ -3,7 +3,7 @@ robot:
   gap_ignore: 5
   amount: 100
 exchange:
-  client_id: 'Ko18oy5G'
-  client_secret: '7nAzLgIQcY6pK61vF9djIVDO8dJsWwKDBhfkALZ6wfQ'
+  client_id: ''
+  client_secret: ''
   uri: 'wss://test.deribit.com/ws/api/v2'
   instrument: 'BTC-PERPETUAL'

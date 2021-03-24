@@ -1,12 +1,16 @@
+import sys
 import config as cfg
 import source as src
 
-def main():
-	gap = 50
-	gap_ignore = 25
-	amount = 100
+def main(argv):
+	config_filename = argv[1]
 	
-	websocket = src.authentication()
+	cnf = src.read_config(config_filename)
+	gap = cnf['robot']['gap']
+	gap_ignore = cnf['robot']['gap_ignore']
+	amount = cnf['robot']['amount']
+	
+	websocket = src.authentication(cnf['exchange'])
 	
 	current_price = src.get_current_price(websocket,cfg.instrument)
 	buy_price = current_price - gap / 2
@@ -49,4 +53,7 @@ def main():
 			status = 'buy'	
 
 if __name__ == '__main__':
-	main()
+	if len(sys.argv) > 1:
+		main(sys.argv)
+	else:
+		print("Try to use: python georgebot.py <configuration_file.yaml>")

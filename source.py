@@ -1,7 +1,7 @@
-import asyncio, websockets, json, random
+import asyncio, websockets, json, random, yaml
 import config as cfg
 
-def authentication():
+def authentication(exchange):
 	"""Websocket authentication from API to send private responses
 
 	https://docs.deribit.com/#public-auth
@@ -9,24 +9,28 @@ def authentication():
 	Returns:
 		websockets object: authenticated websocket
 	"""
-	cfg.msg_id += 1
+	exchange['msg_id'] += 1
+	# cfg.msg_id += 1
 	msg = \
 		{
 			"jsonrpc": "2.0",
-			"id": cfg.msg_id,
+			# "id": cfg.msg_id,
+			"id": exchange['msg_id'],
 			"method": "public/auth",
 			"params": {
 				"grant_type": "client_credentials",
-				"client_id": cfg.client_id,
-				"client_secret": cfg.client_secret
+				# "client_id": cfg.client_id,
+				# "client_secret": cfg.client_secret
+				"client_id": exchange['client_id'],
+				"client_secret": exchange['client_secret']
 			}
 		}
 
 	async def auth(msg):
-		websocket = await websockets.connect(cfg.uri)
+		# websocket = await websockets.connect(cfg.uri)
+		websocket = await websockets.connect(exchange['uri'])
 		await websocket.send(msg)
-		# response = await websocket.recv()
-		# print("websocket: {}".format(response))
+		await websocket.recv()
 		return websocket
 
 	ws = asyncio.get_event_loop().run_until_complete(auth(json.dumps(msg)))
@@ -105,7 +109,7 @@ def set_order(websocket,status,price,amount,instrument):
 			return json.loads(response)['result']['order']['order_id']
 		except Exception as e:
 			print("set_order error: {}".format(e))
-			return False
+			return 0
 
 	order_id = asyncio.get_event_loop().run_until_complete(order(websocket, json.dumps(msg)))
 	
@@ -140,7 +144,11 @@ def check_order(websocket,order_id):
 	async def check(websocket, msg):
 		await websocket.send(msg)
 		response = await websocket.recv()
-		return json.loads(response)['result']['order_state'] != 'open'
+		try:
+			return json.loads(response)['result']['order_state'] != 'open'
+		except Exception as e:
+			print("check_order error: {}".format(e))
+			return False
 
 	order_status = asyncio.get_event_loop().run_until_complete(check(websocket, json.dumps(msg)))    
 	
@@ -179,3 +187,29 @@ def cancel_order(websocket,order_id):
 	asyncio.get_event_loop().run_until_complete(cancel(websocket, json.dumps(msg)))
 	
 	print("Cancelling order {}".format(order_id))
+
+def read_config(filename):
+	"""Read .yaml config file
+
+	robot:
+		gap: 0
+		gap_ignore: 0
+		amount: 0
+	exchange:
+  		client_id: ''
+  		client_secret: ''
+  		uri: ''
+  		instrument: ''	
+	
+	Args:
+		filename (string): configuration file name
+
+	Returns:
+		dict: dict with parameters
+	"""
+	with open(filename) as file:
+		try:
+			confs = yaml.safe_load(file)
+			return confs
+		except yaml.YAMLError as e:
+			print("Read config file error: {}".format(e))

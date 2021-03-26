@@ -116,3 +116,4 @@ dmypy.json
 keys.py
 *.ipynb
 settings.json
+.vscode

@@ -1,5 +1,6 @@
-import asyncio, websockets, json, random, yaml
+import asyncio, websockets, json, random, yaml, datetime
 import config as cfg
+import database as db
 
 def authentication(exchange):
 	"""Websocket authentication from API to send private responses
@@ -215,7 +216,7 @@ def read_config(filename):
 			print("Read config file error: {}".format(e))
 
 def run(websocket,config):
-	"""Main alog function
+	"""Main algo function
 
 	Args:
 		websocket (websockets object): authenticated websocket
@@ -234,34 +235,41 @@ def run(websocket,config):
 	print("buy_price {}, sell_price {}".format(buy_price,sell_price))
 	status = 'buy'
 	order_id = set_order(websocket,status,buy_price,amount,instrument)
+	db.add_order_to_db(datetime.datetime.utcnow(),order_id,status,amount,buy_price)
 
 	while True:
 		current_price = get_current_price(websocket,instrument)
 		if status == 'buy' and current_price > 0:
 			if check_order(websocket,order_id):
+				db.update_order(order_id)
 				status = 'sell'
 				sell_price = current_price + gap
 				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
 				order_id = set_order(websocket,status,sell_price,amount,instrument)
+				db.add_order_to_db(datetime.datetime.utcnow(),order_id,status,amount,sell_price)
 			
 			elif current_price > buy_price + gap + gap_ignore:
 				cancel_order(websocket,order_id)
 				buy_price = current_price - gap/2
 				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
 				order_id = set_order(websocket,status,buy_price,amount,instrument)
+				db.add_order_to_db(datetime.datetime.utcnow(),order_id,status,amount,buy_price)
 		
 		elif status == 'sell' and current_price > 0:
 			if check_order(websocket,order_id):
+				db.update_order(order_id)
 				status = 'buy'
 				buy_price = current_price - gap/2
 				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
 				order_id = set_order(websocket,status,buy_price,amount,instrument)
+				db.add_order_to_db(datetime.datetime.utcnow(),order_id,status,amount,buy_price)
 
 			elif current_price < sell_price - gap - gap_ignore:
 				cancel_order(websocket,order_id)
 				sell_price = current_price + gap
 				print("buy_price {}, sell_price {}".format(buy_price,sell_price))
 				order_id = set_order(websocket,status,sell_price,amount,instrument)
+				db.add_order_to_db(datetime.datetime.utcnow(),order_id,status,amount,sell_price)
 
 		else:
 			print("Order status error")

@@ -1,5 +1,7 @@
-import sys
+import sys, peewee
 import source as src
+import config
+import database as db
 
 def main(argv):
 	config_filename = argv[1]
@@ -15,6 +17,7 @@ def main(argv):
 
 if __name__ == '__main__':
 	if len(sys.argv) > 1:
+		db.create_tables()
 		main(sys.argv)
 	else:
 		print("Try to use: python georgebot.py <configuration_file.yaml>")

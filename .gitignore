@@ -117,4 +117,4 @@ keys.py
 *.ipynb
 settings.json
 .vscode
-.db
+*.db

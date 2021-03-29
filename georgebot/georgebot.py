@@ -1,6 +1,5 @@
-import sys, peewee
+import sys
 import source as src
-import config
 import database as db
 
 def main(argv):

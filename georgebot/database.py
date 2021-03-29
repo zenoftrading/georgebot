@@ -1,5 +1,4 @@
 import peewee
-import config as cfg
 
 DATABASE_NAME = 'deals.db'
 

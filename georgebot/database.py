@@ -8,8 +8,8 @@ database = peewee.SqliteDatabase(DATABASE_NAME)
 class BaseModel(peewee.Model):
     """Base model with meta information of database classes
     """
-	class Meta:
-		database = database
+    class Meta:
+        database = database
 
 class Order(BaseModel):
     """Class with table Order structure
